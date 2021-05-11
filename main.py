@@ -13,6 +13,7 @@ from multiprocessing import Pool, cpu_count
 np.set_printoptions(threshold=sys.maxsize)
 from scipy.optimize import dual_annealing
 import os
+
 glo = 0
 
 
@@ -58,6 +59,7 @@ def read_T1_to_optimal_thresh_and_it_data():
         t1s = pickle.load(fp)
 
     return thresholds, int_times, fidelities, t1s
+
 
 # Prepares data for training and testing, returning training data, testing data, and labels
 def prepare_data(upper_distribution, lower_distribution, low, high):
@@ -325,6 +327,7 @@ def dual_annealing_threshold(dist1, dist2):
     min_threshold = dual_annealing(calculate_error, bounds=list(zip(min, max)), x0=threshold, args=(dist1, dist2))
     return min_threshold
 
+
 # This can take in lab data of simultions instead of making the simulations itself.
 def lab_data_dual_annealing_threshold(sim_upper, sim_lower):
     dist1 = []
@@ -372,7 +375,7 @@ def dual_annealing_threshold_cpp(dist1, dist2):
 # Same as DA_threshold_it, but uses C++
 def DA_threshold_it_cpp(T1, upper_simulations, lower_simulations, threshold_guess):
     # tic = time.perf_counter()
-    #print("here")
+    # print("here")
     if T1 < 10:
         threshold_it = np.array([threshold_guess, T1 / 2])
     else:
@@ -380,7 +383,7 @@ def DA_threshold_it_cpp(T1, upper_simulations, lower_simulations, threshold_gues
     min = [-3000, 0.1]
     max = [3000, 15]
     sim_size = len(upper_simulations) + len(lower_simulations)
-    if upper_simulations[0] > 3000:    #Necessary so the array is the right size for the c++ code
+    if upper_simulations[0] > 3000:  # Necessary so the array is the right size for the c++ code
         for sim in upper_simulations:
             sim = sim[:3000]
         for sim in lower_simulations:
@@ -488,7 +491,7 @@ def find_T1_to_optimal_thresh_and_it_cpp():
     i_times = []
     t1_array = np.array([])
     t1s = np.linspace(0.1, 2, 20)
-    t1_array = np.concatenate([t1s, t1_array])
+    t1_array = np.concatenate([t1_array, t1s])
     pool = Pool(cpu_count())
     results = pool.map(parallel_DA_threshold_it_cpp, [t for t in t1s])
     t1 = 0.1
@@ -503,7 +506,7 @@ def find_T1_to_optimal_thresh_and_it_cpp():
     pool.close()
     pool2 = Pool(cpu_count())
     t1s = np.linspace(2, 10, 16)
-    t1_array = np.concatenate([t1s, t1_array])
+    t1_array = np.concatenate([t1_array, t1s])
     results = pool2.map(parallel_DA_threshold_it_cpp, [t for t in t1s])
     for result in results:
         thresholds.append(result.x[0])
@@ -516,7 +519,7 @@ def find_T1_to_optimal_thresh_and_it_cpp():
     pool2.close()
     pool3 = Pool(cpu_count())
     t1s = np.linspace(10, 100, 45)
-    t1_array = np.concatenate([t1s, t1_array])
+    t1_array = np.concatenate([t1_array, t1s])
     results = pool3.map(parallel_DA_threshold_it_cpp, [t for t in t1s])
     for result in results:
         thresholds.append(result.x[0])
@@ -545,7 +548,7 @@ def parallel_find_T1_to_optimal_thresh_and_it():
     i_times = []
     t1_array = np.array([])
     t1s = np.linspace(0.1, 2, 20)
-    t1_array = np.concatenate([t1s, t1_array])
+    t1_array = np.concatenate([t1_array, t1s])
     pool = Pool(cpu_count())
     results = pool.map(parallel_DA_threshold_it, [t for t in t1s])
     t1 = 0.1
@@ -560,7 +563,7 @@ def parallel_find_T1_to_optimal_thresh_and_it():
     pool.close()
     pool2 = Pool(cpu_count())
     t1s = np.linspace(2, 10, 16)
-    t1_array = np.concatenate([t1s, t1_array])
+    t1_array = np.concatenate([t1_array, t1s])
     results = pool2.map(parallel_DA_threshold_it, [t for t in t1s])
     for result in results:
         thresholds.append(result.x[0])
@@ -573,7 +576,7 @@ def parallel_find_T1_to_optimal_thresh_and_it():
     pool2.close()
     pool3 = Pool(cpu_count())
     t1s = np.linspace(10, 100, 45)
-    t1_array = np.concatenate([t1s, t1_array])
+    t1_array = np.concatenate([t1_array, t1s])
     results = pool3.map(parallel_DA_threshold_it, [t for t in t1s])
     for result in results:
         thresholds.append(result.x[0])
@@ -654,17 +657,19 @@ def find_T1_to_optimal_thresh_and_it():
 
 # Can plot the arrays returned by T1_to_optimal_thresh_and_it
 def plot_T1_to_optimal_thresh_and_it(thresholds, i_times, fidelity_list, t1s):
-    plt.plot(thresholds, t1s)
+    print(thresholds)
+    print(t1s)
+    plt.plot(t1s, thresholds)
     plt.ylabel('Thresholds')
     plt.xlabel('T1')
     plt.show()
     plt.clf()
-    plt.plot(i_times, t1s)
+    plt.plot(t1s, i_times)
     plt.ylabel('Integration times')
     plt.xlabel('T1')
     plt.show()
     plt.clf()
-    plt.plot(fidelity_list, t1s)
+    plt.plot(t1s, fidelity_list)
     plt.ylabel('Best fidelity')
     plt.xlabel('T1')
     plt.show()
@@ -705,43 +710,20 @@ def find_variance(T1, number_iterations):
     return thresholds, its, fidelities
 
 
+# MAIN FUNCTION, RUN CODE HERE
 # Press the green button in the gutter to run the script. Here is where you may run all the functions above.
 if __name__ == '__main__':
-    # thresholds, its = find_variance(10, 20)
 
-    # with open("thresholds.txt", "rb") as fp:  # Unpickling
-    #    thresholds = pickle.load(fp)
-    # with open("int_times.txt", "rb") as fp:  # Unpickling
-    #    int_times = pickle.load(fp)
-    # with open("fidelities.txt", "rb") as fp:  # Unpickling
-    #  fidelities = pickle.load(fp)
-    # with open("t1s.txt", "rb") as fp:  # Unpickling
-    #  t1s = pickle.load(fp)
-
-    # with open("variance_thresholds.txt", "rb") as fp:  # Unpickling
-    #     thresholds = pickle.load(fp)
-    # with open("variance_its.txt", "rb") as fp:  # Unpickling
-    #     its = pickle.load(fp)
-    # with open("variance_fidelities.txt", "rb") as fp:  # Unpickling
-    #    fidelities = pickle.load(fp)
-
-    # plt.plot(np.linspace(0, len(fidelities), num = len(fidelities)), fidelities)
-    # plt.ylabel("fidelity variance")
-    # plt.show()
-    # print(np.std(its))
-    # plt.ylabel('fidelity')
-    # plt.xlabel('T1')
-    # plt.show()
-    # upper_dist, lower_dist = create_distribution(5, 10000, 10)
     tic = time.perf_counter()
-
+    # EXAMPLE:
+    # upper_dist, lower_dist = create_distribution(5, 10000, 10)
     # thresh = dual_annealing_threshold_cpp(upper_dist, lower_dist)
-    thresholds, its, fidelities, t1s = find_T1_to_optimal_thresh_and_it_cpp()
-    #thresholds, int_times, fidelities, t1s = read_T1_to_optimal_thresh_and_it_data()
-    plot_T1_to_optimal_thresh_and_it(thresholds, its, fidelities, t1s)
+    # print(thresh)
+    thresholds, int_times, fidelities, t1s = find_T1_to_optimal_thresh_and_it_cpp()
+    # thresholds, int_times, fidelities, t1s = read_T1_to_optimal_thresh_and_it_data()
+    plot_T1_to_optimal_thresh_and_it(thresholds, int_times, fidelities, t1s)
     toc = time.perf_counter()
     # print(thresh)
     print("seconds to finish:", toc - tic)
-
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
