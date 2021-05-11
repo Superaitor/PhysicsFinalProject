@@ -1,5 +1,6 @@
-NOTE: Look at the final project PDF for a more readable version of this readme.
 
+
+NOTE; For a more readable version of this, look at the end of the final project PDF
 
 The following functions are not an exhaustive list of all the functions made in the project, but only the most important ones / the ones that should be called. Some of the functions that aren’t meant to be called (such as noise_simulator) are explained in the project document above. These are the only functions that are meant to be called by the user, do not call the others. 
 
@@ -38,13 +39,6 @@ Output of print(threshold):
 Note: The fidelity (1 - calculate_error(threshold, upper_dist, lower_dist)) of this threshold for the above integration time and distributions is 0.9181
 
 
-
-
-
-
-
-
-
 def dual_annealing_threshold(dist1, dist2):
 
 Returns the best threshold value using a dual annealing approach. For most purposes, dist1 will represent the first list returned by create_distributions (trials starting in upper state), and dist2 will represent the second list (lower state), for only one integration time. Dual annealing is imported from scipy.optimize import dual_annealing, which attempts to minimize the def calculate_error(threshold, d1, d2) function, with threshold as the variable to be changed and the two distributions returned by create_distributions as constants. The function returns an object that describes the result obtained, including the minimum error found by dual annealing as well as the threshold value that obtained that error. 
@@ -64,9 +58,23 @@ fun: 0.0801
 
 In the above output, fun: 0.0801 means that the optimized error found was 0.0801, or a fidelity of 0.9199.  x: array([-203.35351449]) means that the threshold value that returned this error score was -203.35. 
 
+
 def dual_annealing_threshold_cpp(dist1, dist2):
 
 The same as dual_annealing_threshold, but runs in C++. This makes it more than 3x faster. Remember to run g++ -fPIC -shared -o fasterTest.so faster.cpp on your terminal before running this, else it will not work. 
+
+
+def lab_data_dual_annealing_threshold(sim_upper, sim_lower)
+
+The same as dual_annealing_threshold, but takes in two 2d arrays of simulations instead, making it possible to take in lab data. Assumes the lab data is an array of arrays of time series representing the life cycle of the qubit. 
+Example
+threshold = dual_annealing_threshold(upper_sim, lower_sim)
+Where the first parameter is the upper state simulation and the lower state is the other
+
+
+def lab_data_dual_annealing_threshold_cpp(sim_upper, sim_lower)
+
+The same as lab_data_dual_annealing_threshold, so it can take in simulations/lab data, but runs in c++
 
 
 def train_random_forest(distribution, spins)
@@ -83,10 +91,10 @@ Output of print(score): 0.8699
 This output means that for an integration time of 5, the model correctly classified the trial correctly 87% of the time. 
 
 
-def DA_threshold_it(T1, threshold_guess):
+def DA_threshold_it(T1, upper_simulations, lower_simulations, threshold_guess):
 
 
-Finds the best integration time and best threshold for the given T1. Does this by using the dual annealing algorithm with two varying parameters, calling advanced_calculate_error() and optimizing it. Takes in as parameters a best guess for the threshold as well as T1 (typical time for qubit to decay from upper to lower state). Returns the optimization result represented as a OptimizeResult object, Important attributes are: x the solution array (x[0] js threshold, x[1] is integration time), fun the value of the function at the solution (the fidelity, and message which describes the cause of the termination. Search up OptimizeResult for a description of other attributes. Takes in T1 (The typical time that it takes for a qubit to go from upper to lower state) and your best guess for a threshold (any number, 0 is fine). Takes about 800 seconds to run, so recommend you use the C++ version if possible. 
+Finds the best integration time and best threshold for the given T1. Does this by using the dual annealing algorithm with two varying parameters, calling advanced_calculate_error() and optimizing it. Takes in as parameters a best guess for the threshold as well as T1 (typical time for qubit to decay from upper to lower state). Returns the optimization result represented as a OptimizeResult object, Important attributes are: x the solution array (x[0] js threshold, x[1] is integration time), fun the value of the function at the solution (the fidelity, and message which describes the cause of the termination. Search up OptimizeResult for a description of other attributes. Takes in T1 (The typical time that it takes for a qubit to go from upper to lower state) and your best guess for a threshold (any number, 0 is fine). Takes about 800 seconds to run, so recommend you use the C++ version if possible.  Can also take in lab data (upper_simulations and lower_simulations would be your 2d lab trial arrays containing an array of arrays of time series representing the life cycle of the qubit lab)
 Example: 
 upper_simulations, lower_simulations = noise_simulations(8000, 15, 10)  
 result = DA_threshold_it(1, 5)
@@ -106,9 +114,9 @@ fun: 0.11500000208616257
        x: array([-8.153239  ,  0.40447468])
 
 
-def DA_threshold_it_cpp(T1, threshold_guess) 
+def DA_threshold_it_cpp(T1, upper_simulations, lower_simulations, threshold_guess) 
 
-The same as DA_threshold_it, but runs in C++. This makes it more than 3x faster. It is also significantly more accurate, since its increased speed allows it to run more iterations without taking too long.  Remember to run g++ -fPIC -shared -o fasterTest.so faster.cpp on your terminal before running this, else it will not work. 
+The same as DA_threshold_it, but runs in C++. This makes it more than 3x faster. It is also significantly more accurate, since its increased speed allows it to run more iterations without taking too long.  Remember to run g++ -fPIC -shared -o fasterTest.so faster.cpp on your terminal before running this, else it will not work. Can also take in lab data (upper_simulations and lower_simulations would be your 2d lab trial arrays containing an array of arrays of time series representing the life cycle of the qubit lab)
 
 
 
@@ -137,4 +145,6 @@ thresholds, int_times, fidelities, t1s = read_T1_to_optimal_thresh_and_it_data()
 def plot_T1_to_optimal_thresh_and_it(thresholds, i_times, fidelity_list, t1s):
 
 Takes in the result returned by any of the T1_to_optimal_thresh_and_it functions (the 4 arrays returned by those functions) and creates 3 plots of threshold, integration times, and fidelity with respect to T1.  
+
+
 
