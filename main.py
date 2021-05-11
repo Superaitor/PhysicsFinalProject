@@ -9,10 +9,10 @@ from sklearn.ensemble import RandomForestClassifier
 from math import exp
 import sys
 from multiprocessing import Pool, cpu_count
+
 np.set_printoptions(threshold=sys.maxsize)
 from scipy.optimize import dual_annealing
 import os
-
 glo = 0
 
 
@@ -21,7 +21,7 @@ glo = 0
 
 
 # Saves data list from a simulation so it may be used later
-def save_data(train_data, train_labels, test_data, test_labels):
+def save_ML_data(train_data, train_labels, test_data, test_labels):
     with open("training_data.txt", "wb") as fp:
         pickle.dump(train_data, fp)
     with open("training_labels.txt", "wb") as fp:
@@ -33,7 +33,7 @@ def save_data(train_data, train_labels, test_data, test_labels):
 
 
 # Returns saved list of data from memory
-def read_data():
+def read_ML_data():
     with open("training_data.txt", "rb") as fp:  # Unpickling
         train_data = pickle.load(fp)
     with open("training_labels.txt", "rb") as fp:  # Unpickling
@@ -45,6 +45,19 @@ def read_data():
 
     return train_data, train_labels, test_data, test_labels
 
+
+# Returns the saved lists created by find_T1_to_optimal_thresh_and_it_data
+def read_T1_to_optimal_thresh_and_it_data():
+    with open("thresholds.txt", "rb") as fp:  # Unpickling
+        thresholds = pickle.load(fp)
+    with open("int_times.txt", "rb") as fp:  # Unpickling
+        int_times = pickle.load(fp)
+    with open("fidelities.txt", "rb") as fp:  # Unpickling
+        fidelities = pickle.load(fp)
+    with open("t1s.txt", "rb") as fp:  # Unpickling
+        t1s = pickle.load(fp)
+
+    return thresholds, int_times, fidelities, t1s
 
 # Prepares data for training and testing, returning training data, testing data, and labels
 def prepare_data(upper_distribution, lower_distribution, low, high):
@@ -235,9 +248,7 @@ def sum_simulation(sim, num_points):
     return summation
 
 
-# Used for DA_threshold_it to find the best integration time and threshold. This creates a distribution with the given
-# simulations, integration time, and threshold (it and threshold given as a list of two numbers, with first one being
-# threshold) and calculates its fidelity.
+# Same as advanced_calculate_error, but runs in C++ as well
 def advanced_calculate_error_cpp(threshold_it, s1_array, s2_array, sim_size):
     threshold = threshold_it[0]
     # print("thresh ", threshold)
@@ -250,6 +261,7 @@ def advanced_calculate_error_cpp(threshold_it, s1_array, s2_array, sim_size):
     # print(thresh)
     dir_path = os.path.dirname(os.path.realpath(__file__))
     handle = ctypes.CDLL(dir_path + "/fasterTest.so")
+
     # print(len(s1_array[0]))
     handle.Advanced_calculate_error.argtypes = [ctypes.c_float, ctypes.c_int, ctypes.c_int,
                                                 ctypes.POINTER(ctypes.POINTER(ctypes.c_float)),
@@ -259,10 +271,13 @@ def advanced_calculate_error_cpp(threshold_it, s1_array, s2_array, sim_size):
                                              ctypes.cast(s1_array, ctypes.POINTER(ctypes.POINTER(ctypes.c_float))),
                                              ctypes.cast(s2_array, ctypes.POINTER(ctypes.POINTER(ctypes.c_float))))
 
-    print(answer)
     return answer
 
 
+# This is the function to be minimized by dual annealing in DA_threshold_it. It takes in two 2d arrays filled with
+# simulations (one starting in upper state the other in lower state) and the dual annealing guess for threshold and
+# integration time threshold_it (an array of only two values) and creates distributions for them for the given
+# integration time. Then it calculates the error for the given threshold. Returns that error.
 def advanced_calculate_error(threshold_it, upper_simulations, lower_simulations):
     threshold = threshold_it[0]
     # print("thresh ", threshold)
@@ -323,13 +338,16 @@ def dual_annealing_threshold_cpp(dist1, dist2):
     return min_threshold
 
 
-def DA_threshold_it_cpp(T1, threshold_guess):
+# Same as DA_threshold_it, but uses C++
+def DA_threshold_it_cpp(T1, upper_simulations, lower_simulations, threshold_guess):
     # tic = time.perf_counter()
-    print("here")
-    threshold_it = np.array([threshold_guess, T1 / 2])
+    #print("here")
+    if T1 < 10:
+        threshold_it = np.array([threshold_guess, T1 / 2])
+    else:
+        threshold_it = np.array([threshold_guess, 5])
     min = [-3000, 0.1]
-    max = [3000, 13]
-    upper_simulations, lower_simulations = noise_simulations(8000, 13, T1)  # Create 8000 cubit noise simulations, each
+    max = [3000, 15]
     sim_size = len(upper_simulations) + len(lower_simulations)
     s1_array = (ctypes.c_float * len(upper_simulations[0]) * len(upper_simulations))(
         *(tuple(i) for i in upper_simulations))
@@ -337,8 +355,6 @@ def DA_threshold_it_cpp(T1, threshold_guess):
         *(tuple(i) for i in lower_simulations))
     result = dual_annealing(advanced_calculate_error_cpp, bounds=list(zip(min, max)), x0=threshold_it,
                             args=(s1_array, s2_array, sim_size))
-    # pool.close()
-
     return result
 
 
@@ -348,13 +364,14 @@ def DA_threshold_it_cpp(T1, threshold_guess):
 # result represented as a OptimizeResult object, Important attributes are: x the solution array (x[0] js threshold, x[1]
 # is integration time), fun the value of the function at the solution (the fidelity, and message which describes the
 # cause of the termination. Search up OptimizeResult for a description of other attributes.
-def DA_threshold_it(T1, threshold_guess):
+def DA_threshold_it(T1, upper_simulations, lower_simulations, threshold_guess):
     # tic = time.perf_counter()
-    print("here")
-    threshold_it = np.array([threshold_guess, T1 / 2])
+    if T1 < 10:
+        threshold_it = np.array([threshold_guess, T1 / 2])
+    else:
+        threshold_it = np.array([threshold_guess, 5])
     min = [-3000, 0.1]
-    max = [3000, 13]
-    upper_simulations, lower_simulations = noise_simulations(8000, 13, T1)  # Create 8000 cubit noise simulations, each
+    max = [3000, 15]
 
     result = dual_annealing(advanced_calculate_error, bounds=list(zip(min, max)), x0=threshold_it,
                             args=(upper_simulations, lower_simulations), maxiter=200)
@@ -364,13 +381,17 @@ def DA_threshold_it(T1, threshold_guess):
 
     return result
 
-#same as parallel_DA_threshold but calls the c++ functions
+
+# NOT to be used for running by the user, this is a helper function for parallel_find_t1_to_optimal_thresh_and_it
 def parallel_DA_threshold_it_cpp(T1):
     # tic = time.perf_counter()
-    threshold_it = np.array([0, T1 / 2])
+    if T1 < 10:
+        threshold_it = np.array([0, T1 / 2])
+    else:
+        threshold_it = np.array([0, 5])
     min = [-3000, 0.1]
     max = [3000, 13]
-    upper_simulations, lower_simulations = noise_simulations(8000, 13, T1)  # Create 8000 cubit noise simulations, each
+    upper_simulations, lower_simulations = noise_simulations(8000, 15, T1)  # Create 8000 cubit noise simulations, each
     sim_size = len(upper_simulations) + len(lower_simulations)
     s1_array = (ctypes.c_float * len(upper_simulations[0]) * len(upper_simulations))(
         *(tuple(i) for i in upper_simulations))
@@ -386,24 +407,20 @@ def parallel_DA_threshold_it_cpp(T1):
     return result
 
 
+# NOT to be used for running by the user, this is a helper function for parallel_find_t1_to_optimal_thresh_and_it
 # Same as DA_threshold_it except this one is used for the parallelized functions, and does not take an initial
 # threshold guess
 def parallel_DA_threshold_it(T1):
     # tic = time.perf_counter()
-    print("here")
-    threshold_it = np.array([0, T1 / 2])
+    if T1 < 10:
+        threshold_it = np.array([0, T1 / 2])
+    else:
+        threshold_it = np.array([0, 5])
     min = [-3000, 0.1]
     max = [3000, 13]
-    upper_simulations, lower_simulations = noise_simulations(8000, 13, T1)  # Create 8000 cubit noise simulations, each
-    # of integration time 13
-    # (our choice of max int. time)
-    # t_between_pts = 0.005
-    # num_points = (T1/2)/0.005
-    # arguments = [upper_simulations
-    #  pool = Pool(cpu_count())
+    upper_simulations, lower_simulations = noise_simulations(8000, 15, T1)  # Create 8000 cubit noise simulations, each
     result = dual_annealing(advanced_calculate_error, bounds=list(zip(min, max)), x0=threshold_it,
                             args=(upper_simulations, lower_simulations), maxiter=150)
-    # pool.close()
     toc = time.perf_counter()
     print("time at finish:", toc)
     print(result)
@@ -422,12 +439,14 @@ def test_DA_threshold_it(result, T1):
     return fidelity
 
 
+# Same as find_t1_to_optimal_thresh_and_it, but uses multiprocessing and C++
 def find_t1_to_optimal_thresh_and_it_cpp():
     thresholds = []
     fidelity_list = []
     i_times = []
-    t1s = []
+    t1_array = []
     t1s = np.linspace(0.1, 2, 20)
+    t1_array.append(t1s)
     pool = Pool(cpu_count())
     results = pool.map(parallel_DA_threshold_it_cpp, [t for t in t1s])
     t1 = 0.1
@@ -437,36 +456,33 @@ def find_t1_to_optimal_thresh_and_it_cpp():
         i_times.append(result.x[1])
         error = result.fun
         fidelity_list.append(1 - error)
-        t1s.append(t1)
         t1 += 0.1
         print("T1: ", t1)
         print(result)
     pool.close()
     pool2 = Pool(cpu_count())
     t1s = np.linspace(2, 10, 16)
-    results = pool2.map(parallel_DA_threshold_it, [t for t in t1s])
+    t1_array.append(t1s)
+    results = pool2.map(parallel_DA_threshold_it_cpp, [t for t in t1s])
     for result in results:
-        thresholds.append(result.x[0])
         thresholds.append(result.x[0])
         i_times.append(result.x[1])
         error = result.fun
         fidelity_list.append(1 - error)
-        t1s.append(t1)
-        t1 += 0.1
+        t1 += 0.5
         print("T1: ", t1)
         print(result)
     pool2.close()
     pool3 = Pool(cpu_count())
-    t1s = np.linspace(2, 10, 16)
-    results = pool3.map(parallel_DA_threshold_it, [t for t in t1s])
+    t1s = np.linspace(10, 100, 45)
+    t1_array.append(t1s)
+    results = pool3.map(parallel_DA_threshold_it_cpp, [t for t in t1s])
     for result in results:
-        thresholds.append(result.x[0])
         thresholds.append(result.x[0])
         i_times.append(result.x[1])
         error = result.fun
         fidelity_list.append(1 - error)
-        t1s.append(t1)
-        t1 += 0.1
+        t1 += 2
         print("T1: ", t1)
         print(result)
     pool3.close()
@@ -478,45 +494,45 @@ def find_t1_to_optimal_thresh_and_it_cpp():
         pickle.dump(fidelity_list, fp)
     with open("t1s.txt", "wb") as fp:
         pickle.dump(t1s, fp)
-    return thresholds, i_times, fidelity_list, t1s
+    return thresholds, i_times, fidelity_list, t1_array
 
 
+# Same as find_t1_to_optimal_thresh_and_it, but uses multiprocessing
 def parallel_find_t1_to_optimal_thresh_and_it():
     thresholds = []
     fidelity_list = []
     i_times = []
-    t1s = []
+    t1_array = []
     t1s = np.linspace(0.1, 2, 20)
+    t1_array.append(t1s)
     pool = Pool(cpu_count())
     results = pool.map(parallel_DA_threshold_it, [t for t in t1s])
     t1 = 0.1
     for result in results:
         thresholds.append(result.x[0])
-        thresholds.append(result.x[0])
         i_times.append(result.x[1])
         error = result.fun
         fidelity_list.append(1 - error)
-        t1s.append(t1)
         t1 += 0.1
         print("T1: ", t1)
         print(result)
     pool.close()
     pool2 = Pool(cpu_count())
     t1s = np.linspace(2, 10, 16)
+    t1_array.append(t1s)
     results = pool2.map(parallel_DA_threshold_it, [t for t in t1s])
     for result in results:
-        thresholds.append(result.x[0])
         thresholds.append(result.x[0])
         i_times.append(result.x[1])
         error = result.fun
         fidelity_list.append(1 - error)
-        t1s.append(t1)
-        t1 += 0.1
+        t1 += 0.5
         print("T1: ", t1)
         print(result)
     pool2.close()
     pool3 = Pool(cpu_count())
-    t1s = np.linspace(2, 10, 16)
+    t1s = np.linspace(10, 100, 45)
+    t1_array.append(t1s)
     results = pool3.map(parallel_DA_threshold_it, [t for t in t1s])
     for result in results:
         thresholds.append(result.x[0])
@@ -524,8 +540,7 @@ def parallel_find_t1_to_optimal_thresh_and_it():
         i_times.append(result.x[1])
         error = result.fun
         fidelity_list.append(1 - error)
-        t1s.append(t1)
-        t1 += 0.1
+        t1 += 2
         print("T1: ", t1)
         print(result)
     pool3.close()
@@ -537,7 +552,7 @@ def parallel_find_t1_to_optimal_thresh_and_it():
         pickle.dump(fidelity_list, fp)
     with open("t1s.txt", "wb") as fp:
         pickle.dump(t1s, fp)
-    return thresholds, i_times, fidelity_list, t1s
+    return thresholds, i_times, fidelity_list, t1_array
 
 
 # Note: Takes several hours,  returns arrays that can be used for plotting. This
@@ -546,7 +561,8 @@ def parallel_find_t1_to_optimal_thresh_and_it():
 # plot any of those 3 first arrays returned with the array of T1's (the last, fourth array returned). This way you can
 # see how each of those variables changed as the T1 variable changed. Remember, the 1st value of the T1 array accounts
 # for the same trial of the first value of the threshold array (or it/fidelity ones), the 2nd value of T1 array accounts
-# for the same trial of the 2nd value of the other arrays, and so on.
+# for the same trial of the 2nd value of the other arrays, and so on. It saves all these values to some text files on
+# your computer, so you don't have to repeat after running the function for hours.
 def find_T1_to_optimal_thresh_and_it():
     t1 = 0.1
     thresholds = []
@@ -566,7 +582,6 @@ def find_T1_to_optimal_thresh_and_it():
         print("t1:", t1)
         t1 += 0.1
         previous_threshold = result.x[0]
-    # print(result)
     while t1 < 10:
         result = DA_threshold_it(t1)
         thresholds.append(result.x[0])
@@ -576,7 +591,6 @@ def find_T1_to_optimal_thresh_and_it():
         t1s.append(t1)
         print("t1:", t1)
         t1 += 0.5
-        # print(result)
     while t1 < 100:
         result = DA_threshold_it(t1)
         thresholds.append(result.x[0])
@@ -598,9 +612,24 @@ def find_T1_to_optimal_thresh_and_it():
     return thresholds, i_times, fidelity_list, t1s
 
 
-# Another alternate approach, where each point is classified based on the probability of it being in one state or
-# another of each separate bin. The probability of each bin is calculated first by "training" and assigning a
-# probability using
+# Can plot the arrays returned by T1_to_optimal_thresh_and_it
+def plot_T1_to_optimal_thresh_and_it(thresholds, i_times, fidelity_list, t1s):
+    plt.plot(thresholds, t1s)
+    plt.ylabel('Thresholds')
+    plt.xlabel('T1')
+    plt.show()
+    plt.clf()
+    plt.plot(i_times, t1s)
+    plt.ylabel('Integration times')
+    plt.xlabel('T1')
+    plt.show()
+    plt.clf()
+    plt.plot(fidelity_list, t1s)
+    plt.ylabel('Best fidelity')
+    plt.xlabel('T1')
+    plt.show()
+    plt.clf()
+
 
 # Trains a random forest binary classifier on the two distributions with different integration times.
 def train_random_forest(distribution, spins):
@@ -636,7 +665,7 @@ def find_variance(T1, number_iterations):
     return thresholds, its, fidelities
 
 
-# Press the green button in the gutter to run the script.
+# Press the green button in the gutter to run the script. Here is where you may run all the functions above.
 if __name__ == '__main__':
     # thresholds, its = find_variance(10, 20)
 
@@ -663,40 +692,16 @@ if __name__ == '__main__':
     # plt.ylabel('fidelity')
     # plt.xlabel('T1')
     # plt.show()
-    #upper_dist, lower_dist = create_distribution(5, 10000, 10)
+    # upper_dist, lower_dist = create_distribution(5, 10000, 10)
     tic = time.perf_counter()
-   # result = DA_threshold_it_cpp(1, 5)
-    # print(cpu_count())
-   # print(result)
-    # print(result.x[0])
-    # print(result.x[1])
 
     # thresh = dual_annealing_threshold_cpp(upper_dist, lower_dist)
-    thresholds, its, fidelities, t1s = parallel_find_t1_to_optimal_thresh_and_it()
+    thresholds, its, fidelities, t1s = find_t1_to_optimal_thresh_and_it_cpp()
+    #thresholds, int_times, fidelities, t1s = read_T1_to_optimal_thresh_and_it_data()
+    plot_T1_to_optimal_thresh_and_it(thresholds, its, fidelities, t1s)
     toc = time.perf_counter()
     # print(thresh)
     print("seconds to finish:", toc - tic)
-    # print(upper_dist)
-    # upper_dist, lower_dist = create_distribution(5, 10000, 10)
-    #plot_distributions(upper_dist, lower_dist)
-    # thresh = dual_annealing_threshold(upper_dist, lower_dist)
-    # print(thresh)
-    # print(1 - calculate_error(thresh, upper_dist, lower_dist))
-    # training_data, training_labels, testing_data, testing_labels = prepare_data(upper_dist, lower_dist, 10, 11)
-    # save_data(training_data, training_labels, testing_data, testing_labels)
 
-# training_data, training_labels, testing_data, testing_labels = read_data()
-
-# model = train_random_forest(training_data, training_labels)
-# rf_predictions = model.predict(testing_data)
-# score = accuracy_score(rf_predictions, testing_labels)
-# print(score)
-# print(total_distribution)
-# calculate_fidelity(upper_distribution, lower_distribution, 0)
-# The following lines of codes are done to take only the points of the distribution (not integration times) in order
-# plot on a graph
-# points1 = list(zip(*upper_distribution)) # transpose rows to columns
-# points2 = list(zip(*upper_distribution)) # transpose rows to columns
-# plot_distributions(points1[0], points2[0]
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

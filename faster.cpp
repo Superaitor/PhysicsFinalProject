@@ -28,7 +28,7 @@ float calculate_error(float threshold, int dist_size, float d1[], float d2[])
     return fidelity;
 }
 
-float advanced_calculate_error(float threshold, int dist_size, int num_points, float s1[][2600], float s2[][2600])
+float advanced_calculate_error(float threshold, int dist_size, int num_points, float s1[][3000], float s2[][3000])
 {
     int s_size = dist_size/2;
     float d_size = dist_size/2;
@@ -52,7 +52,6 @@ float advanced_calculate_error(float threshold, int dist_size, int num_points, f
     int incorrect = 0;
     for(int i = 0; i < s_size; i++)
     {
-
         if(d1[i] < threshold){
             incorrect++;
         }
@@ -74,8 +73,8 @@ extern "C" {
         return calculate_error(threshold, dist_size, d1, d2);
     }
 
-
-    float Advanced_calculate_error(float threshold, int dist_size, int num_points, float d1[][2600], float d2[][2600])
+    // NOTE: You must change the second number next to d1 and d2 to the number of points in your own simulation
+    float Advanced_calculate_error(float threshold, int dist_size, int num_points, float d1[][3000], float d2[][3000])
     {
         return advanced_calculate_error(threshold, dist_size, num_points, d1, d2);
     }
