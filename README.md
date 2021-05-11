@@ -1,3 +1,5 @@
+NOTE: Look at the final project PDF for a more readable version of this readme.
+
 
 The following functions are not an exhaustive list of all the functions made in the project, but only the most important ones / the ones that should be called. Some of the functions that aren’t meant to be called (such as noise_simulator) are explained in the project document above. These are the only functions that are meant to be called by the user, do not call the others. 
 
