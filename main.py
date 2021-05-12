@@ -94,15 +94,15 @@ def noise_simulator(M0, it, T1):
 # each simulation into a list. Useful for intensive operations (such as DA_threshold_it) where you may not want to
 # create simulations over and over again, saving time. Creates size/2 simulations starting in lower state,
 # size/2 in upper. Returns two lists of lists, one of simulations starting in upper state, the other in lower state
-def noise_simulations(num_iterations, it, T1):
+def noise_simulations(num_iterations, trial_time, T1):
     upper_simulations = []
     M0 = 1
     for i in range(0, int(num_iterations / 2)):
-        upper_simulations.append(noise_simulator(M0, it, T1))
+        upper_simulations.append(noise_simulator(M0, trial_time, T1))
     lower_simulations = []
     M0 = -1
     for i in range(0, int(num_iterations / 2)):
-        lower_simulations.append(noise_simulator(M0, it, T1))
+        lower_simulations.append(noise_simulator(M0, trial_time, T1))
     return upper_simulations, lower_simulations
 
 
@@ -383,13 +383,13 @@ def DA_threshold_it_cpp(T1, upper_simulations, lower_simulations, threshold_gues
     min = [-3000, 0.1]
     max = [3000, 15]
     sim_size = len(upper_simulations) + len(lower_simulations)
-    if upper_simulations[0] > 3000:  # Necessary so the array is the right size for the c++ code
+    if len(upper_simulations[0]) > 3000:  # Necessary so the array is the right size for the c++ code
         for sim in upper_simulations:
             sim = sim[:3000]
         for sim in lower_simulations:
             sim = sim[:3000]
-    elif upper_simulations[0] < 3000:
-        remaining = 3000 - upper_simulations[0]
+    elif len(upper_simulations[0]) < 3000:
+        remaining = 3000 - len(upper_simulations[0])
         for sim in upper_simulations:
             sim += ([0] * remaining)
         for sim in lower_simulations:
@@ -657,8 +657,6 @@ def find_T1_to_optimal_thresh_and_it():
 
 # Can plot the arrays returned by T1_to_optimal_thresh_and_it
 def plot_T1_to_optimal_thresh_and_it(thresholds, i_times, fidelity_list, t1s):
-    print(thresholds)
-    print(t1s)
     plt.plot(t1s, thresholds)
     plt.ylabel('Thresholds')
     plt.xlabel('T1')
@@ -713,17 +711,10 @@ def find_variance(T1, number_iterations):
 # MAIN FUNCTION, RUN CODE HERE
 # Press the green button in the gutter to run the script. Here is where you may run all the functions above.
 if __name__ == '__main__':
-
-    tic = time.perf_counter()
+    # tic = time.perf_counter()
     # EXAMPLE:
-    # upper_dist, lower_dist = create_distribution(5, 10000, 10)
-    # thresh = dual_annealing_threshold_cpp(upper_dist, lower_dist)
-    # print(thresh)
-    thresholds, int_times, fidelities, t1s = find_T1_to_optimal_thresh_and_it_cpp()
-    # thresholds, int_times, fidelities, t1s = read_T1_to_optimal_thresh_and_it_data()
-    plot_T1_to_optimal_thresh_and_it(thresholds, int_times, fidelities, t1s)
-    toc = time.perf_counter()
-    # print(thresh)
-    print("seconds to finish:", toc - tic)
+    upper_dist, lower_dist = create_distribution(5, 10000, 10)
+    thresh = dual_annealing_threshold_cpp(upper_dist, lower_dist)
+    print(thresh)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
